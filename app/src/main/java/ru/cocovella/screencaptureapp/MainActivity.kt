@@ -32,7 +32,7 @@ import java.lang.StringBuilder
 import java.text.SimpleDateFormat
 import java.util.*
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), MainView {
 
     private var screenDensity: Int = 0
     private var projectManager: MediaProjectionManager? = null
@@ -41,9 +41,10 @@ class MainActivity : AppCompatActivity() {
     private var mediaProjectionCallback: MediaProjectionCallback? = null
     private var mediaRecorder: MediaRecorder? = null
 
-    internal var videoUri: String = ""
+    private var videoUri: String = ""
 
     companion object {
+        private val LOG_TAG = "SCREEN_VIDEO_LOG"
         private val REQUEST_CODE = 1000
         private val REQUEST_PERMISSION = 1001
         private var DISPLAY_WIDTH = 700
@@ -84,20 +85,42 @@ class MainActivity : AppCompatActivity() {
         DISPLAY_HEIGHT = metrics.heightPixels
         DISPLAY_WIDTH = metrics.widthPixels
 
+        initToggleButton()
+        initPlayButton()
+    }
+
+    override fun initPlayButton() {
+       play_btn.setOnClickListener {
+           playVideo()
+       }
+    }
+
+    override fun initToggleButton() {
         toggle_btn.setOnClickListener { button ->
             if (permissionsRequired()) {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECORD_AUDIO)) {
-                        toggle_btn.isChecked = false
-                        Snackbar.make(root_layout, "Permissions", Snackbar.LENGTH_INDEFINITE)
-                            .setAction("ENABLE") {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    )
+                    || ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.RECORD_AUDIO
+                    )
+                    || ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.FOREGROUND_SERVICE
+                    )
+                )
+                {
+                    toggle_btn.isChecked = false
+                    Snackbar.make(root_layout, "Recording permissions are required", Snackbar.LENGTH_INDEFINITE)
+                        .setAction("ENABLE") {
+                            requestPermissions()
+                        }.show()
+                } else
 
-                                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO), REQUEST_PERMISSION)
-
-                            }.show()
-
-                    } else {
-                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO), REQUEST_PERMISSION)
+                {
+                    requestPermissions()
                 }
 
             } else {
@@ -106,9 +129,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestPermissions() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.FOREGROUND_SERVICE
+            ),
+            REQUEST_PERMISSION
+        )
+    }
+
     private fun permissionsRequired() =
         (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) +
-                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) +
+                ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE)
                 != PackageManager.PERMISSION_GRANTED)
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -145,12 +181,11 @@ class MainActivity : AppCompatActivity() {
             mediaRecorder!!.stop()
             mediaRecorder!!.reset()
             stopScreenRecord()
-            playVideoInVideoView()
-            //todo : найти файл на девайсе и кнопку Play нарисовать
+            playVideo()
         }
     }
 
-    private fun playVideoInVideoView() {
+    override fun playVideo() {
         video_view.visibility = View.VISIBLE
         video_view.setVideoURI(Uri.parse(videoUri))
         video_view.start()
@@ -167,7 +202,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createVirtualDisplay(): VirtualDisplay? {
-        return mediaProjection!!.createVirtualDisplay("MainActivity", DISPLAY_WIDTH, DISPLAY_HEIGHT, screenDensity, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+        return mediaProjection!!. createVirtualDisplay("MainActivity", DISPLAY_WIDTH, DISPLAY_HEIGHT, screenDensity, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
         mediaRecorder!!.surface, null, null)
     }
 
@@ -183,9 +218,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         mediaProjectionCallback = MediaProjectionCallback()
-        if (data == null) { Log.e("ERROR", "onActivityResult - mediaProjection == $mediaProjection data == $data") }
         mediaProjection = projectManager!!.getMediaProjection(resultCode, data!!)
-        Log.e("ERROR", "onActivityResult - mediaProjection == $mediaProjection")
         mediaProjection!!.registerCallback(mediaProjectionCallback, null)
         virtualDisplay = createVirtualDisplay()
         mediaRecorder!!.start()
@@ -205,6 +238,7 @@ class MainActivity : AppCompatActivity() {
                 .append(SimpleDateFormat("dd-MM-yyyy-hh_mm_ss").format(Date()))
                 .append(".mp4")
                 .toString()
+            Log.e(LOG_TAG, "initRecorder(): videoUri = $videoUri")
 
             mediaRecorder!!.setOutputFile(videoUri)
             mediaRecorder!!.setVideoSize(DISPLAY_WIDTH, DISPLAY_HEIGHT)
@@ -239,6 +273,10 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         destroyMediaProjection()
+    }
+
+    override fun startMediaProjectionService() {
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
 }
